@@ -12,6 +12,7 @@
   @media (max-width: 720px) { .mtable { display: none; } .mcards { display: block; } }
   .filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
   .filter input { flex: 1 1 260px; min-width: 0; max-width: 460px; }
+  .filter input::placeholder { color: var(--text-2); opacity: 1; }
   .hint { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
   /* journey header */
   .ctx { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; font-size: 13px; color: var(--text-2); }
@@ -37,6 +38,12 @@
   .tl .meta { display: block; color: var(--muted); font-size: 12.5px; margin-top: 1px; }
   .tl .meta .warn { color: var(--warn); }
   .tl .meta .err { color: var(--bad); }
+  .error-details { margin-top: 4px; font-size: 12.5px; }
+  .error-details summary { width: fit-content; max-width: 100%; padding: 4px 0; color: var(--bad-text); cursor: pointer; }
+  .error-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .error-messages { margin-top: 4px; color: var(--text-2); }
+  .error-messages p { margin: 0 0 8px; }
+  .error-messages code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
   .tl .meta code { background: var(--bg); padding: 0 5px; border-radius: 4px; font-size: 11.5px; color: var(--text-2); }
   .ev-tag { display: inline-block; min-width: 44px; margin-right: 8px; padding: 0 7px; border-radius: 9px; font-size: 11.5px; text-align: center; background: var(--info-bg); color: var(--info); vertical-align: 1px; }
   .ev-custom .ev-tag { background: #143324; color: var(--good-text); }
@@ -235,7 +242,10 @@ function foldSession(events) {
       cur.err += ev.err_count || 0; cur.rage += ev.rage_count || 0; cur.dead += ev.dead_count || 0;
       const p = parseProps(ev.props);
       if (p && Array.isArray(p.ck)) for (const c of p.ck) if (c && c.s) cur.ck.set(c.s, (cur.ck.get(c.s) || 0) + (c.n || 1));
-      if (p && Array.isArray(p.err)) for (const e of p.err) if (e && e.m) cur.errMsgs.push(`${e.m}${e.n > 1 ? ` ×${e.n}` : ''}`);
+      if (p && Array.isArray(p.err)) for (const e of p.err) if (e && e.m) {
+        const source = e.url ? `\n${e.url}${e.line ? ':' + e.line : ''}${e.column ? ':' + e.column : ''}` : '';
+        cur.errMsgs.push(`${e.m}${e.n > 1 ? ` ×${e.n}` : ''}${source}`);
+      }
       if (ev.verdict && ev.verdict !== 'clean' && cur.verdict === 'clean') cur.verdict = ev.verdict;
       continue;
     }
@@ -255,7 +265,9 @@ function pageLine(line, isSessionFirst) {
     const total = [...line.ck.values()].reduce((a, b) => a + b, 0);
     meta.push(`${total} ${t('clicks')} ${top}`);
   }
-  if (line.err) meta.push(`<span class="err" title="${esc(line.errMsgs.join('\n'))}">⚠ ${line.err} ${t('JS errors')}</span>`);
+  const errorDetails = line.err ? `<details class="error-details"><summary>${line.err} ${te('Page errors')} · ${te('Error details')}</summary><div class="error-messages">${line.errMsgs.length
+    ? line.errMsgs.map((message) => `<p><code>${esc(message)}</code></p>`).join('')
+    : `<p>${te('No error details were recorded.')}</p>`}</div></details>` : '';
   if (line.rage) meta.push(`<span class="warn">${line.rage} ${t('rage clicks')}</span>`);
   if (line.dead) meta.push(`<span class="warn">${line.dead} ${t('dead clicks')}</span>`);
   // annotate where the session came from, on its first pageview only
@@ -268,6 +280,7 @@ function pageLine(line, isSessionFirst) {
     <span class="t">${hms(ev.ts)}</span>
     <span class="ev-tag">${te('page')}</span><span class="what">${esc(ev.path ?? '')}</span>
     ${meta.length ? `<span class="meta">${meta.join(' · ')}</span>` : ''}
+    ${errorDetails}
   </li>`;
 }
 

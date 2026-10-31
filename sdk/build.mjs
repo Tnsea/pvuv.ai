@@ -6,6 +6,7 @@
  */
 
 import { build } from 'esbuild';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -21,4 +22,10 @@ await build({
   legalComments: 'none',
 });
 
-console.log('built sdk/dist/f.js');
+// This self-hosted console serves the SDK too. Keep the existing endpoint and
+// the cache-busting URL used by Genogram in sync on every subsequent build.
+const consoleAssets = path.join(here, '../workers/console/public');
+await mkdir(consoleAssets, { recursive: true });
+await Promise.all(['f.js', 'f-behavior-20261030.js'].map(name =>
+  copyFile(path.join(here, 'dist/f.js'), path.join(consoleAssets, name))));
+console.log('built sdk/dist/f.js and console SDK endpoints');

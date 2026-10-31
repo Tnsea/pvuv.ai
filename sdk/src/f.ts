@@ -392,7 +392,7 @@ import type { XPayload } from '../../shared/flags';
   const touchDevice = 'ontouchstart' in win && nav.maxTouchPoints > 0 && mobileUA;
 
   win.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
+    if (!e.isTrusted || e.pointerType !== 'mouse') return;
     const now = e.timeStamp || 0;
     const px = e.clientX, py = e.clientY;
     if (pmLastT > 0 && now > pmLastT) {
@@ -452,7 +452,7 @@ import type { XPayload } from '../../shared/flags';
   function clickKey(el: Element): string {
     let key = el.id ? '#' + el.id
       : el.tagName.toLowerCase() + (el.classList.length ? '.' + el.classList[0] : '');
-    const label = ((el as HTMLElement).innerText || (el as HTMLInputElement).value || '')
+    const label = ((el as HTMLElement).innerText || el.getAttribute('aria-label') || (el as HTMLInputElement).value || '')
       .trim().replace(/\s+/g, ' ').slice(0, 24);
     if (label) key += '|' + label;
     return key.slice(0, 64);
@@ -498,7 +498,9 @@ import type { XPayload } from '../../shared/flags';
   }
 
   doc.addEventListener('click', (e) => {
-    if (!tracking) return;
+    // Guided demos dispatch DOM events too; only the viewer's input belongs in
+    // click totals, frustration signals, pointer evidence and no-code events.
+    if (!tracking || !e.isTrusted) return;
     // click/pointer alignment (desktop): a real click lands where the pointer
     // just was; synthetic clicks arrive with no nearby movement
     if (!touchDevice) {
@@ -527,24 +529,36 @@ import type { XPayload } from '../../shared/flags';
 
   // JS errors: count + a deduplicated sample of the messages (the count feeds
   // aggregation; the messages tell the AI/owner WHAT broke). Bounded hard:
-  // ≤5 distinct messages per report, each ≤200 chars, no stacks.
+  // ≤5 distinct messages per report, with bounded resource URLs and no stacks.
   const ERR_MAX_MSGS = 5;
-  let errMsgs: Record<string, number> = {};
-  function noteError(msg: unknown, src?: string, line?: number): void {
+  type ErrorSample = { m: string; n: number; type: 'js' | 'resource'; url?: string; line?: number; column?: number };
+  let errMsgs: Record<string, ErrorSample> = {};
+  function errorUrl(src?: string): string | undefined {
+    if (!src) return;
+    try {
+      const url = new URL(src, loc.href);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return;
+      return (url.origin + url.pathname).slice(0, 200);
+    } catch { return; }
+  }
+  function noteError(msg: unknown, src?: string, line?: number, column?: number, type: ErrorSample['type'] = 'js'): void {
     if (errDelta >= 200) return;
     errDelta++;
-    let m = String(msg ?? 'unknown error').slice(0, 200);
-    if (src) {
-      const base = String(src).split('/').pop() || '';
-      if (base) m += ` (${base.slice(0, 40)}${line ? ':' + line : ''})`;
-    }
-    if (!(m in errMsgs) && Object.keys(errMsgs).length >= ERR_MAX_MSGS) return;
-    errMsgs[m] = (errMsgs[m] || 0) + 1;
+    const sample: ErrorSample = { m: String(msg ?? 'unknown error').slice(0, 200), n: 1, type };
+    const url = errorUrl(src);
+    if (url) sample.url = url;
+    if (line && Number.isFinite(line)) sample.line = line;
+    if (column && Number.isFinite(column)) sample.column = column;
+    const key = JSON.stringify(sample);
+    if (errMsgs[key]) errMsgs[key].n++;
+    else if (Object.keys(errMsgs).length < ERR_MAX_MSGS) errMsgs[key] = sample;
   }
   win.addEventListener('error', (e) => {
-    // resource-load errors (img/script) have no message — label by the tag
-    if (e.message) noteError(e.message, e.filename, e.lineno);
-    else noteError('resource load failed: ' + ((e.target as Element | null)?.tagName || '').toLowerCase());
+    if (e.message) noteError(e.message, e.filename, e.lineno, e.colno);
+    else {
+      const target = e.target as (Element & { src?: string; href?: string }) | null;
+      noteError('resource load failed: ' + (target?.tagName || '').toLowerCase(), target?.src || target?.href, undefined, undefined, 'resource');
+    }
   }, true);
   win.addEventListener('unhandledrejection', (e) => {
     const r = (e as PromiseRejectionEvent).reason;
@@ -594,7 +608,7 @@ import type { XPayload } from '../../shared/flags';
       ev.er = errDelta; errDelta = 0; any = true;
       const msgs = Object.keys(errMsgs);
       if (msgs.length) {
-        ev.p = { ...(ev.p || {}), err: msgs.map((m) => ({ m, n: errMsgs[m] })) };
+        ev.p = { ...(ev.p || {}), err: msgs.map((m) => errMsgs[m]) };
         errMsgs = {};
       }
     }
@@ -621,6 +635,10 @@ import type { XPayload } from '../../shared/flags';
         pmAlignN > 0 ? Math.round(pmAlignSum / pmAlignN) : -1,
       ] };
     }
+    // The ingest limit applies to all properties together. Retain counts and
+    // the first useful errors even when escaped messages fill the sample.
+    const errors = ev.p?.err as ErrorSample[] | undefined;
+    while (errors && errors.length > 1 && JSON.stringify(ev.p).length > 4000) errors.pop();
     return any;
   }
 
@@ -809,7 +827,7 @@ import type { XPayload } from '../../shared/flags';
 
   // outbound_click (§4.1)
   doc.addEventListener('click', (e) => {
-    if (!tracking) return;
+    if (!tracking || !e.isTrusted) return;
     const a = (e.target as Element | null)?.closest?.('a[href]');
     if (!a) return;
     const href = (a as HTMLAnchorElement).href;

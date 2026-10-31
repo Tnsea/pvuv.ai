@@ -158,6 +158,7 @@ shared/config.gen.*
 # built SDK copied into the console's assets at deploy time (DEPLOY.md step 8).
 # Generated from sdk/src — committing it invites deploying a stale loader.
 workers/console/public/f.js
+workers/console/public/f-behavior-20261030.js
 
 # custom deployment homepage — replaces the default landing page on deploy,
 # never committed (keep your landing copy out of the public repo).
