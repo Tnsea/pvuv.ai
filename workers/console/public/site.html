@@ -1603,7 +1603,7 @@ async function loadUtm() {
 // A funnel answers three questions, in this order: how many get through, WHO
 // falls out, and WHAT they were doing when they did. The last one is the
 // reason we collect dwell / scroll / rage clicks / dead clicks / JS errors at
-// all — a drop with "31% of them rage-clicked here" is a bug report; a drop
+// all — rapid input can help investigate a drop, but is not a confirmed failure; a drop
 // without it is just a number.
 //
 // Definitions live on the server (saved funnels), so they follow you across
@@ -1727,7 +1727,7 @@ function funnelDropRow(step, i, reached) {
     const share = (n) => Math.round(n / f.droppers * 100);
     if (f.avg_dwell_ms) bits.push(`<span class="fchip">${te('stayed')} ${dur(f.avg_dwell_ms)}</span>`);
     if (f.avg_scroll != null) bits.push(`<span class="fchip">${te('scrolled')} ${f.avg_scroll}%</span>`);
-    if (f.rage_visitors) bits.push(`<span class="fchip bad">${share(f.rage_visitors)}% ${te('rage-clicked')}</span>`);
+    if (f.rage_visitors) bits.push(`<span class="fchip">${share(f.rage_visitors)}% ${te('rapid-clicked')}</span>`);
     if (f.dead_visitors) bits.push(`<span class="fchip warn">${share(f.dead_visitors)}% ${te('clicked something dead')}</span>`);
     if (f.err_visitors) bits.push(`<span class="fchip bad">${share(f.err_visitors)}% ${te('hit a JS error')}</span>`);
   }

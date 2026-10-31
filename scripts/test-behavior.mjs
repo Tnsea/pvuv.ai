@@ -49,6 +49,33 @@ test('synthetic outbound/declarative clicks are ignored and real outbound naviga
   b.click(link, false); assert.equal(b.queued.length, 0);
   b.click(link, true); assert.equal(b.queued[0].event, 'outbound_click');
 });
+test('rapid groups preserve click totals and identify repeatable controls separately', () => {
+  const b = browser();
+  const zoom = { ...button, id: 'zoom-in', closest(selector) {
+    return selector.startsWith('a[href],') || selector === '[data-pvuv-repeatable="true"]' ? this : null;
+  } };
+  for (let i = 0; i < 6; i++) b.click(zoom, true);
+  const first = b.collect();
+  assert.equal(first.rg, 1); assert.equal(first.p.ck[0].n, 6);
+  assert.deepEqual(first.p.rc, [{ s: '#zoom-in|Close the AI draft', n: 1, r: 1 }]);
+  for (let i = 0; i < 3; i++) b.click(button, true);
+  const next = b.collect();
+  assert.equal(next.rg, 1); assert.equal(next.p.rc[0].r, undefined);
+  const empty = b.collect(); assert.equal(empty.rg, undefined); assert.equal(empty.p?.rc, undefined);
+});
+test('different controls with identical labels do not form a rapid group', () => {
+  const b = browser();
+  for (let i = 0; i < 3; i++) b.click({ ...button }, true);
+  const ev = b.collect(); assert.equal(ev.rg, undefined); assert.equal(ev.p.rc, undefined);
+  assert.equal(ev.p.ck[0].n, 3);
+});
+test('a rapid group crossing a pulse is attributed once to its actual control', () => {
+  const b = browser(); b.click(button, true); b.click(button, true);
+  assert.equal(b.collect().rg, undefined);
+  b.click(button, true);
+  assert.equal(b.collect().p.rc[0].n, 1);
+  b.click(button, true); assert.equal(b.collect().rg, undefined);
+});
 test('resource failures identify the file without query, fragment or URL credentials', () => {
   const b = browser();
   b.error({ target: { tagName: 'SCRIPT', src: 'https://user:password@cdn.example/app.js?token=secret#private' } });
@@ -70,9 +97,9 @@ test('runtime errors retain source location and deduplicate per source', () => {
 test('large error samples and a full click buffer stay within the ingestion property limit', () => {
   const b = browser();
   for (let i = 0; i < 5; i++) b.error({ message: '"'.repeat(200) + i, filename: `/${'a'.repeat(195)}${i}.js`, lineno: i + 1, colno: 2 });
-  for (let i = 0; i < 15; i++) b.click({ ...button, id: '"'.repeat(55) + i }, true);
+  for (let i = 0; i < 15; i++) { const target = { ...button, id: '"'.repeat(55) + i }; for (let j = 0; j < 3; j++) b.click(target, true); }
   const ev = b.collect();
-  assert.equal(ev.er, 5); assert.ok(ev.p.err.length > 0);
+  assert.equal(ev.er, 5); assert.ok(ev.p.err.length > 0); assert.equal(ev.rg, 15); assert.ok(ev.p.rc.length > 0);
   assert.ok(JSON.stringify(ev.p).length <= 4096);
 });
 
@@ -90,4 +117,11 @@ test('journey errors are expandable, include new URLs and safely display histori
   assert.doesNotMatch(rendered, /<img src=x/);
   assert.match(ctx.render([page, pulse([{ m: 'resource load failed: script', n: 1 }])]), /resource load failed: script/);
   assert.match(ctx.render([page, pulse([])]), /No error details were recorded/);
+  const rapid = ctx.render([page, { event: 'page_pulse', path: '/', rage_count: 5, props: JSON.stringify({ rc: [
+    { s: '#zoom', n: 2, r: 1 }, { s: '<img src=x>', n: 1 },
+  ] }) }]);
+  assert.match(rapid, /5 rapid-click bursts/); assert.match(rapid, /Repeatable controls/); assert.match(rapid, /Other controls/);
+  assert.match(rapid, /2 bursts without recorded targets/); assert.doesNotMatch(rapid, /<img src=x>|rage clicks/);
+  const older = ctx.render([page, { event: 'page_pulse', path: '/', rage_count: 30 }]);
+  assert.match(older, /30 bursts without recorded targets/);
 });

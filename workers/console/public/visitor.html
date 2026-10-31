@@ -44,6 +44,11 @@
   .error-messages { margin-top: 4px; color: var(--text-2); }
   .error-messages p { margin: 0 0 8px; }
   .error-messages code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+  .rapid-details { margin-top: 4px; color: var(--text-2); font-size: 12.5px; }
+  .rapid-details summary { width: fit-content; max-width: 100%; padding: 4px 0; cursor: pointer; }
+  .rapid-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .rapid-details p { margin: 6px 0; }
+  .rapid-details code { font-size: 12px; overflow-wrap: anywhere; }
   .tl .meta code { background: var(--bg); padding: 0 5px; border-radius: 4px; font-size: 11.5px; color: var(--text-2); }
   .ev-tag { display: inline-block; min-width: 44px; margin-right: 8px; padding: 0 7px; border-radius: 9px; font-size: 11.5px; text-align: center; background: var(--info-bg); color: var(--info); vertical-align: 1px; }
   .ev-custom .ev-tag { background: #143324; color: var(--good-text); }
@@ -230,7 +235,7 @@ function foldSession(events) {
   const lines = [];
   let cur = null;
   const newPage = (ev) => {
-    cur = { kind: 'page', ev, dwell: 0, scroll: null, err: 0, rage: 0, dead: 0, ck: new Map(), errMsgs: [], verdict: ev.verdict };
+    cur = { kind: 'page', ev, dwell: 0, scroll: null, err: 0, rage: 0, dead: 0, ck: new Map(), rapid: new Map(), errMsgs: [], verdict: ev.verdict };
     lines.push(cur);
   };
   for (const ev of events) {
@@ -242,6 +247,11 @@ function foldSession(events) {
       cur.err += ev.err_count || 0; cur.rage += ev.rage_count || 0; cur.dead += ev.dead_count || 0;
       const p = parseProps(ev.props);
       if (p && Array.isArray(p.ck)) for (const c of p.ck) if (c && c.s) cur.ck.set(c.s, (cur.ck.get(c.s) || 0) + (c.n || 1));
+      if (p && Array.isArray(p.rc)) for (const c of p.rc) if (c && typeof c.s === 'string' && Number.isSafeInteger(c.n) && c.n > 0) {
+        const key = JSON.stringify([c.s, c.r === 1]);
+        const previous = cur.rapid.get(key);
+        cur.rapid.set(key, { s: c.s, n: (previous?.n || 0) + c.n, repeatable: c.r === 1 });
+      }
       if (p && Array.isArray(p.err)) for (const e of p.err) if (e && e.m) {
         const source = e.url ? `\n${e.url}${e.line ? ':' + e.line : ''}${e.column ? ':' + e.column : ''}` : '';
         cur.errMsgs.push(`${e.m}${e.n > 1 ? ` ×${e.n}` : ''}${source}`);
@@ -268,7 +278,11 @@ function pageLine(line, isSessionFirst) {
   const errorDetails = line.err ? `<details class="error-details"><summary>${line.err} ${te('Page errors')} · ${te('Error details')}</summary><div class="error-messages">${line.errMsgs.length
     ? line.errMsgs.map((message) => `<p><code>${esc(message)}</code></p>`).join('')
     : `<p>${te('No error details were recorded.')}</p>`}</div></details>` : '';
-  if (line.rage) meta.push(`<span class="warn">${line.rage} ${t('rage clicks')}</span>`);
+  const attributed = [...line.rapid.values()].reduce((sum, target) => sum + target.n, 0);
+  const rapidDetails = line.rage ? `<details class="rapid-details"><summary>${line.rage} ${te(line.rage === 1 ? 'rapid-click burst' : 'rapid-click bursts')}</summary><p>${te('Repeated input does not confirm an error or frustration.')}</p>${[true, false].map(repeatable => {
+    const targets = [...line.rapid.values()].filter(target => target.repeatable === repeatable);
+    return targets.length ? `<p><strong>${te(repeatable ? 'Repeatable controls' : 'Other controls')}</strong></p>${targets.map(target => `<p><code>${esc(target.s)}</code> · ${target.n} ${te(target.n === 1 ? 'burst' : 'bursts')}</p>`).join('')}` : '';
+  }).join('')}${line.rage > attributed ? `<p>${line.rage - attributed} ${te('bursts without recorded targets')}</p>` : ''}</details>` : '';
   if (line.dead) meta.push(`<span class="warn">${line.dead} ${t('dead clicks')}</span>`);
   // annotate where the session came from, on its first pageview only
   if (isSessionFirst && ev.referrer) {
@@ -281,6 +295,7 @@ function pageLine(line, isSessionFirst) {
     <span class="ev-tag">${te('page')}</span><span class="what">${esc(ev.path ?? '')}</span>
     ${meta.length ? `<span class="meta">${meta.join(' · ')}</span>` : ''}
     ${errorDetails}
+    ${rapidDetails}
   </li>`;
 }
 

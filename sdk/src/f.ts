@@ -445,6 +445,8 @@ import type { XPayload } from '../../shared/flags';
   let ckMap: Record<string, number> = {};
   let ckTotal = 0;
   let rageDelta = 0;
+  type RapidTarget = { s: string; n: number; r?: 1 };
+  let rapidTargets: Record<string, RapidTarget> = {};
   let deadDelta = 0;
   let errDelta = 0;
 
@@ -464,10 +466,14 @@ import type { XPayload } from '../../shared/flags';
     ckTotal++;
   }
 
-  // rage: 3+ clicks on the same element within a short burst (counted once per
-  // burst). dead: a click on an interactive-looking element that produced no
+  // Rapid input: 3+ clicks on the same DOM control within 1.2s, once per
+  // burst. The legacy rg wire field remains comparable with older data; it
+  // is not evidence of frustration or failure. Mark intentional repeated
+  // actions with data-pvuv-repeatable="true" for a separate target breakdown.
+  // dead: a click on an interactive-looking element that produced no
   // DOM change and no navigation shortly after.
   let lastClickKey = '';
+  let lastClickElement: Element | null = null;
   let burstStart = 0;
   let burstCount = 0;
   let rageCounted = false;
@@ -483,11 +489,18 @@ import type { XPayload } from '../../shared/flags';
     const key = clickKey(el);
     noteClickKey(key);
     const now = Date.now();
-    if (key === lastClickKey && now - burstStart <= 1200) {
+    if (el === lastClickElement && key === lastClickKey && now - burstStart <= 1200) {
       burstCount++;
-      if (burstCount >= 3 && !rageCounted) { rageDelta++; rageCounted = true; }
+      if (burstCount >= 3 && !rageCounted) {
+        rageDelta++; rageCounted = true;
+        const repeatable = Boolean(el.closest('[data-pvuv-repeatable="true"]'));
+        let target = key + (repeatable ? ':repeatable' : ':other');
+        if (!(target in rapidTargets) && Object.keys(rapidTargets).length >= 8) target = repeatable ? '(other):repeatable' : '(other):other';
+        const sample = rapidTargets[target] ??= { s: target.startsWith('(other):') ? '(other)' : key, n: 0, ...(repeatable ? { r: 1 as const } : {}) };
+        sample.n++;
+      }
     } else {
-      lastClickKey = key; burstStart = now; burstCount = 1; rageCounted = false;
+      lastClickKey = key; lastClickElement = el; burstStart = now; burstCount = 1; rageCounted = false;
     }
     // dead-click probe: nothing mutated and no navigation started within 600ms
     const clickTs = now;
@@ -613,6 +626,7 @@ import type { XPayload } from '../../shared/flags';
       }
     }
     if (rageDelta > 0) { ev.rg = rageDelta; rageDelta = 0; any = true; }
+    if (Object.keys(rapidTargets).length) { ev.p = { ...(ev.p || {}), rc: Object.values(rapidTargets) }; rapidTargets = {}; }
     if (deadDelta > 0) { ev.dc = deadDelta; deadDelta = 0; any = true; }
     if (ckTotal > 0) {
       ev.p = { ...(ev.p || {}), ck: Object.keys(ckMap).map((s) => ({ s, n: ckMap[s] })) };
@@ -639,6 +653,8 @@ import type { XPayload } from '../../shared/flags';
     // the first useful errors even when escaped messages fill the sample.
     const errors = ev.p?.err as ErrorSample[] | undefined;
     while (errors && errors.length > 1 && JSON.stringify(ev.p).length > 4000) errors.pop();
+    const rapid = ev.p?.rc as RapidTarget[] | undefined;
+    while (rapid && rapid.length > 1 && JSON.stringify(ev.p).length > 4000) rapid.pop();
     return any;
   }
 
@@ -787,8 +803,8 @@ import type { XPayload } from '../../shared/flags';
     maxScroll = 0;
     // behavior deltas are per-page: a fresh route starts a clean slate and a
     // fresh (fast-first) pulse schedule
-    ckMap = {}; ckTotal = 0; rageDelta = 0; deadDelta = 0; errDelta = 0; errMsgs = {};
-    lastClickKey = ''; burstCount = 0;
+    ckMap = {}; ckTotal = 0; rageDelta = 0; rapidTargets = {}; deadDelta = 0; errDelta = 0; errMsgs = {};
+    lastClickKey = ''; lastClickElement = null; burstCount = 0;
     pmN = 0; pmVMean = 0; pmVM2 = 0; pmTurnSum = 0; pmTurnN = 0; pmPauses = 0;
     pmPrevAngle = null; pmLastT = 0; pmClicksNoMove = 0; pmAlignSum = 0; pmAlignN = 0;
     delete x.x14; delete x.x15;

@@ -111,7 +111,7 @@ function snapshotText(
           const bits: string[] = [];
           if (fr.avg_dwell_ms) bits.push(`avg ${dur(fr.avg_dwell_ms)} on the page`);
           if (fr.avg_scroll != null) bits.push(`avg scroll ${fr.avg_scroll}%`);
-          if (fr.rage_visitors) bits.push(`${sh(fr.rage_visitors)} rage-clicked (${fr.rage} clicks)`);
+          if (fr.rage_visitors) bits.push(`${sh(fr.rage_visitors)} rapid-clicked (${fr.rage} bursts; repeated input alone does not confirm a failure)`);
           if (fr.dead_visitors) bits.push(`${sh(fr.dead_visitors)} clicked a dead element (${fr.dead})`);
           if (fr.err_visitors) bits.push(`${sh(fr.err_visitors)} hit a JS error (${fr.err})`);
           if (bits.length) line += `; those who left: ${bits.join(', ')}`;

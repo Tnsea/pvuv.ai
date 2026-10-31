@@ -236,7 +236,7 @@
       'Direct': '直接访问',
       'All verdicts': '全部判定', 'Goals': '目标', 'Show more': '显示更多', 'times in': '时间按',
       'Pageviews in period': '本时段浏览量', 'Sessions (lifetime)': '会话(累计)', 'Evidence': '证据', 'datacenter network': '数据中心网络',
-      'clicks': '次点击', 'JS errors': 'JS 报错', 'Page errors': '页面错误', 'Error details': '错误详情', 'No error details were recorded.': '未记录错误详情。', 'rage clicks': '暴躁点击', 'dead clicks': '无效点击', 'form': '表单', 'submit': '提交',
+      'clicks': '次点击', 'JS errors': 'JS 报错', 'Page errors': '页面错误', 'Error details': '错误详情', 'No error details were recorded.': '未记录错误详情。', 'rage clicks': '快速连点', 'rapid clicks': '快速连点', 'rapid-click burst': '组快速连点', 'rapid-click bursts': '组快速连点', 'burst': '组连点', 'bursts': '组连点', 'rapid-clicked': '有快速连点', 'Repeated input does not confirm an error or frustration.': '重复点击不代表发生错误或用户不满。', 'Repeatable controls': '可重复操作', 'Other controls': '其他控件', 'bursts without recorded targets': '组连点未记录具体按钮', 'dead clicks': '无效点击', 'form': '表单', 'submit': '提交',
       'entry': '入口', 'exit': '出口', 'Path or verdict filters apply to the list only; the journey always shows every event.': '路径/判定筛选只作用于列表;轨迹页始终显示全部事件。',
       'Show visitors who opened a page, or only a verdict class. Click a visitor to replay the full journey.': '查看打开过某页面的访客,或只看某一判定类别。点击访客可回放完整轨迹。',
       'Page path, e.g. /pay — trailing * matches a prefix (/pay*)': '页面路径,如 /pay —— 结尾 * 匹配前缀(/pay*)',
